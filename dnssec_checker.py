@@ -64,32 +64,45 @@ def validate_dnssec(domain: str) -> dict:
     request = dns.message.make_query(
         domain, dns.rdatatype.DNSKEY, want_dnssec=True)
 
-    # send the query to the master NS
-    response = dns.query.udp(request, ns_address)
-    if response.rcode() != 0:
-        result.update(
-            message="ERROR: no DNSKEY record found or SERVEFAIL", code=STATE_WARNING)
-        return result
+    # set a longer timeout (in seconds)
+    timeout = 10
 
-    # find an RRSET for the DNSKEY record
-    answer = response.answer
-    if len(answer) != 2:
-        result.update(
-            message="ERROR: could not find RRSET record (DNSKEY and RR DNSKEY) in zone", code=STATE_WARNING)
-        return result
+    # try DNSSEC validation with retries
+    for i in range(3):
+        try:
+            # send the query to the master NS
+            response = dns.query.udp(request, ns_address, timeout=timeout)
+            if response.rcode() != 0:
+                result.update(
+                    message="ERROR: no DNSKEY record found or SERVEFAIL", code=STATE_WARNING)
+                return result
 
-    # check if is the DNSKEY record signed, RRSET validation
-    name = dns.name.from_text(domain)
-    try:
-        dns.dnssec.validate(answer[0], answer[1], {name: answer[0]})
-    except dns.dnssec.ValidationFailure:
-        result.update(
-            message="CRITICAL: this domain is not likely signed by dnssec", code=STATE_CRITICAL)
-        return result
-    else:
-        result.update(
-            message="OK: there is a valid dnssec self-signed key for the domain", code=STATE_OK)
-        return result
+            # find an RRSET for the DNSKEY record
+            answer = response.answer
+            if len(answer) != 2:
+                result.update(
+                    message="ERROR: could not find RRSET record (DNSKEY and RR DNSKEY) in zone", code=STATE_WARNING)
+                return result
+
+            # check if is the DNSKEY record signed, RRSET validation
+            name = dns.name.from_text(domain)
+            dns.dnssec.validate(answer[0], answer[1], {name: answer[0]})
+        except dns.exception.Timeout:
+            # retry on timeout
+            if i == 2:
+                result.update(
+                    message="ERROR: DNSSEC validation failed after retries", code=STATE_WARNING)
+                return result
+        except dns.dnssec.ValidationFailure:
+            result.update(
+                message="CRITICAL: this domain is not likely signed by dnssec", code=STATE_CRITICAL)
+            return result
+        else:
+            result.update(
+                message="OK: there is a valid dnssec self-signed key for the domain", code=STATE_OK)
+            return result
+
+    return result
 
 
 if __name__ == "__main__":
