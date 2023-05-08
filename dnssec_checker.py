@@ -53,7 +53,12 @@ def validate_dnssec(domain: str) -> dict:
     result = {"message": "empty", "code": STATE_UNKNOWN}
 
     # get nameservers (NS) for the domain
-    response = dns.resolver.resolve(domain, rdtype=dns.rdatatype.NS)
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.timeout = 20
+    resolver.nameservers = ['1.1.1.1',
+                            '9.9.9.9',
+                            '8.8.8.8']
+    response = resolver.resolve(domain, rdtype=dns.rdatatype.NS)
 
     # use the first NS
     ns_server = response.rrset[0]
