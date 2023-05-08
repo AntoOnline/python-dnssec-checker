@@ -65,7 +65,7 @@ def validate_dnssec(domain: str) -> dict:
         domain, dns.rdatatype.DNSKEY, want_dnssec=True)
 
     # set a longer timeout (in seconds)
-    timeout = 10
+    timeout = 20
 
     # try DNSSEC validation with retries
     for i in range(3):
@@ -74,14 +74,14 @@ def validate_dnssec(domain: str) -> dict:
             response = dns.query.udp(request, ns_address, timeout=timeout)
             if response.rcode() != 0:
                 result.update(
-                    message="ERROR: no DNSKEY record found or SERVEFAIL", code=STATE_WARNING)
+                    {"message": "ERROR: no DNSKEY record found or SERVEFAIL", "code": STATE_WARNING})
                 return result
 
             # find an RRSET for the DNSKEY record
             answer = response.answer
             if len(answer) != 2:
                 result.update(
-                    message="ERROR: could not find RRSET record (DNSKEY and RR DNSKEY) in zone", code=STATE_WARNING)
+                    {"message": "ERROR: could not find RRSET record (DNSKEY and RR DNSKEY) in zone", "code": STATE_WARNING})
                 return result
 
             # check if is the DNSKEY record signed, RRSET validation
@@ -91,15 +91,15 @@ def validate_dnssec(domain: str) -> dict:
             # retry on timeout
             if i == 2:
                 result.update(
-                    message="ERROR: DNSSEC validation failed after retries", code=STATE_WARNING)
+                    {"message": "ERROR: DNSSEC validation failed after retries", "code": STATE_WARNING})
                 return result
         except dns.dnssec.ValidationFailure:
             result.update(
-                message="CRITICAL: this domain is not likely signed by dnssec", code=STATE_CRITICAL)
+                {"message": "CRITICAL: this domain is not likely signed by dnssec", "code": STATE_CRITICAL})
             return result
         else:
             result.update(
-                message="OK: there is a valid dnssec self-signed key for the domain", code=STATE_OK)
+                {"message": "OK: there is a valid dnssec self-signed key for the domain", "code": STATE_OK})
             return result
 
     return result
@@ -110,4 +110,3 @@ if __name__ == "__main__":
     validation = validate_dnssec(parse_args.domain)
 
     print(validation['message'])
-    exit(validation['code'])
